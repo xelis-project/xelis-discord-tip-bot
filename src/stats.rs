@@ -14,7 +14,7 @@ use poise::serenity_prelude::{
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use xelis_common::{api::daemon::GetInfoResult, config::COIN_VALUE};
+use xelis_common::{api::daemon::GetInfoResult, config::COIN_VALUE, utils::format_xelis};
 
 use crate::service::{WalletService, XelisStatsSnapshot};
 
@@ -350,7 +350,7 @@ impl StatsSnapshot {
             .map(|info| info.network.to_string())
             .unwrap_or_else(|| "N/A".to_string());
         let block_time = info
-            .map(|info| format_seconds(info.average_block_time))
+            .map(|info| format_block_time(info.average_block_time))
             .unwrap_or_else(|| "N/A".to_string());
         let block_reward = info
             .map(|info| format_block_reward(info.block_reward))
@@ -436,20 +436,20 @@ fn channel_name(label: &str, value: String) -> String {
     }
 }
 
-fn format_seconds(milliseconds: u64) -> String {
+fn format_block_time(milliseconds: u64) -> String {
     format!("{:.0}s avg", milliseconds as f64 / 1_000.0)
 }
 
 fn format_block_reward(atomic_units: u64) -> String {
-    format!("{:.4} XEL", atomic_units as f64 / COIN_VALUE as f64)
+    format!("{:.4} XEL", format_xelis(atomic_units))
 }
 
 fn format_max_supply(atomic_units: u64) -> String {
-    format!("{:.1}M XEL", atomic_units as f64 / COIN_VALUE as f64 / 1_000_000.0)
+    format!("{:.1}M XEL", format_xelis(atomic_units / 1_000_000))
 }
 
 fn format_circulating_supply(atomic_units: u64) -> String {
-    format!("{:.0} XEL", atomic_units as f64 / COIN_VALUE as f64)
+    format!("{:.0} XEL", format_xelis(atomic_units))
 }
 
 fn coins_mined_percentage(info: &GetInfoResult) -> Option<String> {
