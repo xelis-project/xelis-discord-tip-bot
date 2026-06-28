@@ -1,4 +1,5 @@
 mod service;
+mod stats;
 mod telegram_message;
 
 use std::{sync::Arc, time::Duration};
@@ -22,6 +23,7 @@ use service::{
     WalletService,
     WalletServiceImpl
 };
+use stats::StatsConfig;
 use teloxide::{
     dispatching::{HandlerExt, UpdateFilterExt},
     prelude::{dptree, Dispatcher, Requester},
@@ -145,6 +147,9 @@ pub struct Config {
     /// Concurrency configuration for Network Handler
     #[clap(long, default_value_t = detect_available_parallelism())]
     pub network_concurrency: usize,
+    /// XELIS stats channel updater configuration
+    #[clap(flatten)]
+    stats: StatsConfig,
 }
 
 #[derive(BotCommands, Clone)]
@@ -247,6 +252,10 @@ async fn main() -> Result<()> {
 
     // start the service
     Arc::clone(&service).start(discord_client.http.clone(), bot).await?;
+
+    if config.stats.enabled() {
+        stats::spawn_stats_updater(discord_client.http.clone(), service.clone(), config.stats.clone());
+    }
 
     config.logs_modules.push(ModuleConfig { module: "serenity".to_string(), level: LogLevel::Warn });
     let prompt = Prompt::new(

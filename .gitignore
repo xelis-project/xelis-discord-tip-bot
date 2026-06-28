@@ -1,1 +1,4 @@
 /target
+/logs
+*.bin
+xelis-stats-channels.json

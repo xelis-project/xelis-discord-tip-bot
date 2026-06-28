@@ -1,6 +1,6 @@
-# XELIS Tip Bot
+# XELIS Bot
 
-XELIS Tip Bot lets you to send/receive and withdraw/deposit XELIS coins across Discord and Telegram.
+XELIS Bot lets you to send/receive and withdraw/deposit XELIS coins across Discord and Telegram.
 This support Slash Commands from Discord.
 
 You also get notified in DM for each deposit confirmed.

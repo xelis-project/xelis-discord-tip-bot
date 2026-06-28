@@ -14,6 +14,7 @@ use teloxide::{types::ChatId, Bot};
 use thiserror::Error;
 use xelis_common::{
     api::{
+        daemon::{GetDifficultyResult, GetInfoResult},
         wallet::{EntryType, TransactionEntry},
         DataElement,
         DataValue
@@ -114,6 +115,11 @@ pub enum ServiceError {
 
 pub type WalletService = Arc<WalletServiceImpl>;
 
+pub struct XelisStatsSnapshot {
+    pub info: GetInfoResult,
+    pub difficulty: GetDifficultyResult,
+}
+
 pub struct WalletServiceImpl {
     wallet: Arc<Wallet>,
     running: AtomicBool,
@@ -191,17 +197,17 @@ impl WalletServiceImpl {
 
     // Handle a confirmed transaction
     // This function is called when a transaction is in stable topoheight
-    async fn handle_confirmed_transaction(&self, transaction: &TransactionEntry, http: &Http, bot: &Bot) -> Result<()> {
+    async fn handle_confirmed_transaction(&self, transaction: &TransactionEntry<'static>, http: &Http, bot: &Bot) -> Result<()> {
         match &transaction.entry {
             EntryType::Incoming { from: _, transfers } => {
                 // Check if there is any transfer that is for us
-                for transfer in transfers.iter().filter(|t| t.asset == XELIS_ASSET) {
-                    if let Some(data) = &transfer.extra_data {
+                for transfer in transfers.iter().filter(|t| t.asset.as_ref() == &XELIS_ASSET) {
+                    if let Some(data) = transfer.extra_data.as_ref() {
                         if let Some(user_id) = data.data().and_then(|v| v.as_value().and_then(|v| v.as_type::<UserApplication>()).ok()) {
                             let amount = transfer.amount;
                             {
                                 let mut storage = self.wallet.get_storage().write().await;
-                                let tx_key = transaction.hash.clone().into();
+                                let tx_key = transaction.hash.as_ref().clone().into();
                                 if storage.has_custom_data(HISTORY_TREE, &tx_key)? {
                                     // Already processed this TX
                                     info!("Already processed TX: {}", transaction.hash);
@@ -350,6 +356,27 @@ impl WalletServiceImpl {
         Ok(topoheight)
     }
 
+    // Get public chain stats using the daemon API already owned by the wallet
+    pub async fn get_xelis_stats_snapshot(&self) -> Result<XelisStatsSnapshot, ServiceError> {
+        let network_handler = {
+            let lock = self.wallet.get_network_handler();
+            let network_handler = lock.lock().await;
+            network_handler.as_ref().cloned().ok_or(ServiceError::WalletOffline)?
+        };
+
+        let api = network_handler.get_api();
+        let info = api.get_info().await?;
+        let difficulty = api.client()
+            .call("get_difficulty")
+            .await
+            .map_err(anyhow::Error::from)?;
+
+        Ok(XelisStatsSnapshot {
+            info,
+            difficulty,
+        })
+    }
+
     // Generate a deposit address for a user based on its id
     pub fn get_address_for_user(&self, user: &UserApplication) -> Address {
         self.wallet.get_address_with(DataElement::Value(DataValue::Blob(user.to_bytes())))
@@ -431,7 +458,7 @@ impl WalletServiceImpl {
 
         // Update balance
         storage.set_custom_data(BALANCES_TREE, &user.into(), &(balance - (fee + amount)).into())?;
-        state.apply_changes(&mut storage).await?;
+        state.apply_changes(&mut storage, &self.wallet, &transaction).await?;
 
         Ok(tx_hash)
     }
@@ -512,7 +539,7 @@ impl WalletServiceImpl {
         let tx_hash = transaction.hash();
         info!("Withdrawing {} XEL to {} in TX {}", format_xelis(amount - fee), to, tx_hash);
 
-        state.apply_changes(&mut storage).await?;
+        state.apply_changes(&mut storage, &self.wallet, &transaction).await?;
 
         Ok(())
     }
