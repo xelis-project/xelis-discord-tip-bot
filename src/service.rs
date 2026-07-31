@@ -39,7 +39,7 @@ use xelis_wallet::{
     error::WalletError,
     precomputed_tables,
     storage::EncryptedStorage,
-    wallet::{Event, Wallet}
+    wallet::{Event, Wallet, RecoverOption},
 };
 use log::{debug, error, info, warn};
 
@@ -134,7 +134,7 @@ impl WalletServiceImpl {
         let wallet = if Path::new(&name).is_dir() {
             Wallet::open(name, password, network, precomputed_tables, n_threads_decryption, network_concurrency)?
         } else {
-            Wallet::create(name, password, None, network, precomputed_tables, n_threads_decryption, network_concurrency).await?
+            Wallet::create(name, password, RecoverOption::None, network, precomputed_tables, n_threads_decryption, network_concurrency).await?
         };
 
         wallet.set_online_mode(&daemon_address, true).await?;
